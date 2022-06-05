@@ -1,0 +1,299 @@
+# to run: docker-compose run
+#
+# Create a .env file in the same folder as this file and change the variables.
+# MOUNT_POINT=/tmp/
+# VPN_PROVIDER=changeme
+# VPN_CONFIG=changeme
+# VPN_USERNAME=changeme
+# VPN_PASSWORD=changeme
+#
+#
+version: "3"
+
+services:
+  transmission:
+    image: haugene/transmission-openvpn
+    container_name: transmission
+    restart: always
+    cap_add: 
+      - NET_ADMIN
+    ports:
+      - "9091:9091"
+    networks:
+      - plexnet
+    environment:
+      - OPENVPN_PROVIDER=${VPN_PROVIDER}
+      - OPENVPN_CONFIG=${VPN_CONFIG}
+      - OPENVPN_USERNAME=${VPN_USERNAME}
+      - OPENVPN_PASSWORD=${VPN_PASSWORD}
+      - OPENVPN_OPTS=--inactive 3600 --ping 10 --ping-exit 60
+      - LOCAL_NETWORK=192.168.0.0/24
+    volumes:
+      - ${MOUNT_POINT}/transmission:/data
+      - /etc/localtime:/etc/localtime:ro
+
+  radarr:
+    image: mdhiggins/radarr-sma
+    container_name: radarr
+    restart: always
+    ports:
+      - "7878:7878"
+    networks:
+      - plexnet
+    environment:
+      - PGID=${PGID}
+      - PUID=${PUID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${MOUNT_POINT}/transmission:/data
+      - ${MOUNT_POINT}/radarr-config:/config
+      - ${MOUNT_POINT}/sma:/usr/local/sma/config
+      - ${MOUNT_POINT}/transmission/completed:/downloads
+      - ${MOUNT_POINT}/plex/movies:/movies
+  
+  sonarr:
+    image: mdhiggins/sonarr-sma
+    container_name: sonarr
+    restart: always
+    ports:
+      - "8989:8989"
+    networks:
+      - plexnet
+    environment:
+      - PGID=${PGID}
+      - PUID=${PUID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${MOUNT_POINT}/transmission:/data
+      - ${MOUNT_POINT}/sonarr/config:/config
+      - ${MOUNT_POINT}/sma:/usr/local/sma/config
+      - ${MOUNT_POINT}/plex/tv:/tv
+      - ${MOUNT_POINT}/transmission/completed:/downloads
+
+  jackett:
+    image: linuxserver/jackett
+    container_name: jackett
+    restart: always
+    networks:
+      - plexnet
+    environment:
+      - PGID=${PGID}
+      - PUID=${PUID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${MOUNT_POINT}/jackett/config:/config
+      - ${MOUNT_POINT}/jackett/downloads:/downloads
+    ports:
+      - "9117:9117"
+
+  plex:
+    privileged: true
+    image: linuxserver/plex
+    container_name: plex
+    restart: always
+    ports:
+      - "32400:32400"
+      - "1900:1900"
+      - "3005:3005"
+      - "5353:5353"
+      - "8324:8324"
+      - "32410:32410"
+      - "32412:32412"
+      - "32413:32413"
+      - "32414:32414"
+      - "32469:32469"
+    networks:
+      - plexnet
+    environment:
+      - PGID=${PGID}
+      - PUID=${PUID}
+      - TZ=${TIMEZONE}
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=GPU-6bf5c0be-4e3b-9675-0845-92593353079f
+    volumes:
+      - ${MOUNT_POINT}/plex-config:/config
+      - ${MOUNT_POINT}/plex:/data
+      - ${MOUNT_POINT}/plex/transcode:/transcode
+    runtime: nvidia
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+      - /dev/nvidia-caps:/dev/nvidia-caps
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    networks:
+      - plexnet
+    volumes:
+      - ${MOUNT_POINT}/bazarr/config:/config
+      - ${MOUNT_POINT}/plex/movies:/movies
+      - ${MOUNT_POINT}/plex/tv:/tv
+    ports:
+      - 6767:6767
+    restart: always
+
+  organizr:
+    image: organizr/organizr
+    container_name: organizr
+    restart: always
+    environment:
+      - fpm=true
+      - branch=v2-master
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${MOUNT_POINT}/organizr/config:/config
+    networks:
+      - plexnet
+    ports:
+      - 9983:80
+
+  tautulli:
+    image: lscr.io/linuxserver/tautulli
+    container_name: tautulli
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    networks:
+      - plexnet
+    volumes:
+      - ${MOUNT_POINT}/tautulli/config:/config
+    ports:
+      - 8181:8181
+    restart: always
+
+  monitorr:
+    image: monitorr/monitorr
+    container_name: monitorr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TIMEZONE}
+    networks:
+      - plexnet
+    volumes:
+      - ${MOUNT_POINT}/monitorr:/app
+    ports:
+      - 4545:80
+    restart: always
+
+  overseerr:
+    image: sctx/overseerr:latest
+    container_name: overseerr
+    environment:
+      - LOG_LEVEL=debug
+      - TZ=${TIMEZONE}
+    # ports:
+    #   - "5055:5055"
+    ports:
+      - 80:5055
+    # expose:
+    #   - 80
+    networks:
+      - plexnet
+    volumes:
+      - ${MOUNT_POINT}/overseerr/config:/app/config
+    restart: always
+
+  speedtest:
+    container_name: speedtest
+    image: henrywhitaker3/speedtest-tracker:latest
+    ports:
+        - 8765:80
+    volumes:
+        - ${MOUNT_POINT}/speedtest:/config
+    environment:
+        - TZ=${TIMEZONE}
+        - PGID=${PGID}
+        - PUID=${PUID}
+        - OOKLA_EULA_GDPR=true
+    logging:
+        driver: "json-file"
+        options:
+            max-file: "10"
+            max-size: "200k"
+    restart: always
+
+  tdarr:
+    privileged: true
+    container_name: tdarr
+    image: ghcr.io/haveagitgat/tdarr:latest
+    restart: always
+    networks:
+      - plexnet
+    ports:
+      - 8265:8265 # webUI port
+      - 8266:8266 # server port
+      - 8267:8267 # Internal node port
+      - 8268:8268 # Example extra node port
+    environment:
+      - TZ=${TIMEZONE}
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - UMASK_SET=002
+      - serverIP=0.0.0.0
+      - serverPort=8266
+      - webUIPort=8265
+      - internalNode=true
+      - nodeID=MyInternalNode
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=GPU-6bf5c0be-4e3b-9675-0845-92593353079f
+    volumes:
+      - ${MOUNT_POINT}/tdarr/server:/app/server
+      - ${MOUNT_POINT}/tdarr/configs:/app/configs
+      - ${MOUNT_POINT}/tdarr/logs:/app/logs
+      - ${MOUNT_POINT}/plex:/media
+      - ${MOUNT_POINT}/plex/movies:/home/Tdarr/Media/Movies
+      - ${MOUNT_POINT}/plex/tv:/home/Tdarr/Media/TVShows
+      - ${MOUNT_POINT}/transcode_cache:/temp
+    runtime: nvidia
+    devices:
+      - /dev/dri:/dev/dri
+      - /dev/nvidia0:/dev/nvidia0
+      - /dev/nvidiactl:/dev/nvidiactl
+      - /dev/nvidia-modeset:/dev/nvidia-modeset
+      - /dev/nvidia-uvm:/dev/nvidia-uvm
+      - /dev/nvidia-uvm-tools:/dev/nvidia-uvm-tools
+      - /dev/nvidia-caps:/dev/nvidia-caps
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    networks:
+      - plexnet
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${MOUNT_POINT}/readarr/config:/config
+      - ${MOUNT_POINT}/plex/books:/books
+      - ${MOUNT_POINT}/transmission:/data
+      - ${MOUNT_POINT}/transmission/completed:/downloads
+    ports:
+      - 8787:8787
+    restart: always
+
+  # proxy:
+  #   container_name: proxy
+  #   hostname: proxy
+  #   image: nginx
+  #   ports:
+  #     - 80:80
+  #     - 443:443
+    # volumes:
+    #   - ${MOUNT_POINT}/proxy/config:/etc/nginx
+    #   - ${MOUNT_POINT}/proxy/certs:/etc/ssl/private
+networks:
+  plexnet:
+    driver: bridge
