@@ -2,8 +2,10 @@
 Designing a perfect (pretty okay) media server
 
 # Install
-Run docker-compose up
+Run d`ocker-compose up`
+
 Configure each application
+
 Find the container names/ports with `docker ps`.
 
 # Configuration
