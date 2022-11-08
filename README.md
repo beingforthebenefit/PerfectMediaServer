@@ -2,7 +2,7 @@
 Designing a perfect (pretty okay) media server
 
 # Install
-Run d`ocker-compose up`
+Run `docker-compose up`
 
 Configure each application
 
